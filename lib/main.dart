@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
   runApp(const MyApp());
@@ -7,115 +8,187 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Viddy Browser',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const BrowserScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class BrowserScreen extends StatefulWidget {
+  const BrowserScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<BrowserScreen> createState() => _BrowserScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _BrowserScreenState extends State<BrowserScreen> {
+  late final WebViewController _controller;
+  final TextEditingController _urlController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  bool _isLoading = false;
+  double _progress = 0;
+  bool _canGoBack = false;
+  bool _canGoForward = false;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            setState(() {
+              _progress = progress / 100;
+            });
+          },
+          onPageStarted: (String url) {
+            setState(() {
+              _isLoading = true;
+              if (!_focusNode.hasFocus) {
+                _urlController.text = url;
+              }
+            });
+          },
+          onPageFinished: (String url) async {
+            final canBack = await _controller.canGoBack();
+            final canForward = await _controller.canGoForward();
+            setState(() {
+              _isLoading = false;
+              if (!_focusNode.hasFocus) {
+                _urlController.text = url;
+              }
+              _canGoBack = canBack;
+              _canGoForward = canForward;
+            });
+          },
+          onWebResourceError: (WebResourceError error) {
+            debugPrint('Web resource error: ${error.description}');
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse('https://www.google.com'));
+
+    _focusNode.addListener(() {
+      if (_focusNode.hasFocus) {
+        _urlController.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _urlController.text.length,
+        );
+      }
     });
   }
 
   @override
+  void dispose() {
+    _urlController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _loadUrl() {
+    String url = _urlController.text.trim();
+    if (url.isNotEmpty) {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        if (!url.contains('.')) {
+          url = 'https://www.google.com/search?q=$url';
+        } else {
+          url = 'https://$url';
+        }
+      }
+      _controller.loadRequest(Uri.parse(url));
+      _focusNode.unfocus();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: SafeArea(
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            if (_isLoading && _progress < 1.0)
+              LinearProgressIndicator(
+                value: _progress,
+                minHeight: 2,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            Expanded(
+              child: WebViewWidget(controller: _controller),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+      bottomNavigationBar: BottomAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+        height: 64,
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back, size: 20),
+              onPressed: _canGoBack ? () => _controller.goBack() : null,
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(8),
+            ),
+            IconButton(
+              icon: const Icon(Icons.arrow_forward, size: 20),
+              onPressed: _canGoForward ? () => _controller.goForward() : null,
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(8),
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed: () => _controller.reload(),
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(8),
+            ),
+            IconButton(
+              icon: const Icon(Icons.home, size: 20),
+              onPressed: () => _controller.loadRequest(Uri.parse('https://www.google.com')),
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(8),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceVariant,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: TextField(
+                  controller: _urlController,
+                  focusNode: _focusNode,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: const InputDecoration(
+                    hintText: 'Search or type URL',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  onSubmitted: (value) => _loadUrl(),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.search, size: 20),
+              onPressed: _loadUrl,
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(8),
+            ),
+          ],
+        ),
       ),
     );
   }
